@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: net.sf.log4jdbc.sql.jdbcapi.DriverSpy
+    # 아래 url, username, password는 oracle 연동할때
+    #url: jdbc:log4jdbc:oracle:thin:@localhost:1521:xe
+    #username: user1
+    #password: user1
+    # 아래 url, username, password, schema는 H2 메모리 DB 연동할때
+    url: jdbc:log4jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    hikari:
+      connection-timeout: 60000
+      minimum-idle: 5
+      maximum-pool-size: 5
+
+      

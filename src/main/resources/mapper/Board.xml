@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.terry.mybatis.mapper.BoardMapper">
+
+    <select id="listBoard" parameterType="string" resultType="Board">
+        SELECT IDX, TITLE, CONTENTS, READCOUNT FROM BOARD
+        <if test="searchValue != null">
+            TITLE LIKE '%' || ${searchValue} || '%' OR CONTENTS LIKE '%' || ${searchValue} || '%'
+        </if>
+    </select>
+
+    <select id="viewBoard" parameterType="long" resultType="Board">
+        SELECT IDX, TITLE, CONTENTS, READCOUNT FROM BOARD
+        WHERE IDX = #{idx}
+    </select>
+
+    <insert id="insertBoard" parameterType="Board">
+        <selectKey keyProperty="idx" resultType="long" order="BEFORE">
+            select BOARD_SEQUENCE.NEXTVAL from DUAL
+        </selectKey>
+        INSERT INTO BOARD(IDX, TITLE, CONTENTS, READCOUNT)
+        VALUES(#{idx}, #{title}, #{contents}, #{readCount})
+    </insert>
+
+    <update id="updateBoard" parameterType="Board">
+        UPDATE BOARD SET TITLE=#{title}, CONTENTS=#{contents} WHERE IDX=#{idx}
+    </update>
+
+    <update id="updateBoardReadCount" parameterType="Board">
+        UPDATE BOARD SET READCOUNT = READCOUNT + 1 WHERE IDX=#{idx}
+    </update>
+
+    <delete id="deleteBoard" parameterType="long">
+        DELETE FROM BOARD WHERE IDX=#{idx}
+    </delete>
+
+</mapper>
