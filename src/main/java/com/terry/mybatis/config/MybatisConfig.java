@@ -53,7 +53,7 @@ public class MybatisConfig {
     }
 
     @Bean(destroyMethod="clearCache")
-    public CustomSqlSessionTemplate customSqlSessionTemplate(SqlSessionFactory sqlSessionFactory){
+    public CustomSqlSessionTemplate customSqlSessionTemplate(SqlSessionFactory sqlSessionFactory) throws IllegalAccessException{
         return new CustomSqlSessionTemplate(sqlSessionFactory);
     }
 

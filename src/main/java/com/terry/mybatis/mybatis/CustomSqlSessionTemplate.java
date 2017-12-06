@@ -1,468 +1,99 @@
 package com.terry.mybatis.mybatis;
 
-/**
- *    Copyright 2010-2016 the original author or authors.
- *
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
- */
-
-import static java.lang.reflect.Proxy.newProxyInstance;
-import static org.apache.ibatis.reflection.ExceptionUtil.unwrapThrowable;
-import static org.mybatis.spring.SqlSessionUtils.closeSqlSession;
-import static org.mybatis.spring.SqlSessionUtils.getSqlSession;
-import static org.mybatis.spring.SqlSessionUtils.isSqlSessionTransactional;
-import static org.springframework.util.Assert.notNull;
-
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
-import java.sql.Connection;
-import java.util.List;
-import java.util.Map;
-
-import org.apache.ibatis.cursor.Cursor;
 import org.apache.ibatis.exceptions.PersistenceException;
-import org.apache.ibatis.executor.BatchResult;
 import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.mapping.ParameterMapping;
-import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.session.ExecutorType;
-import org.apache.ibatis.session.ResultHandler;
-import org.apache.ibatis.session.RowBounds;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.MyBatisExceptionTranslator;
 import org.mybatis.spring.SqlSessionTemplate;
-import org.springframework.beans.factory.DisposableBean;
 import org.springframework.dao.support.PersistenceExceptionTranslator;
+import org.springframework.util.ReflectionUtils;
 
-/**
- * Thread safe, Spring managed, {@code SqlSession} that works with Spring
- * transaction management to ensure that that the actual SqlSession used is the
- * one associated with the current Spring transaction. In addition, it manages
- * the session life-cycle, including closing, committing or rolling back the
- * session as necessary based on the Spring transaction configuration.
- * <p>
- * The template needs a SqlSessionFactory to create SqlSessions, passed as a
- * constructor argument. It also can be constructed indicating the executor type
- * to be used, if not, the default executor type, defined in the session factory
- * will be used.
- * <p>
- * This template converts MyBatis PersistenceExceptions into unchecked
- * DataAccessExceptions, using, by default, a {@code MyBatisExceptionTranslator}.
- * <p>
- * Because SqlSessionTemplate is thread safe, a single instance can be shared
- * by all DAOs; there should also be a small memory savings by doing this. This
- * pattern can be used in Spring configuration files as follows:
- *
- * <pre class="code">
- * {@code
- * <bean id="sqlSessionTemplate" class="org.mybatis.spring.SqlSessionTemplate">
- *   <constructor-arg ref="sqlSessionFactory" />
- * </bean>
- * }
- * </pre>
- *
- * @author Putthibong Boonbong
- * @author Hunter Presnall
- * @author Eduardo Macarron
- *
- * @see SqlSessionFactory
- * @see MyBatisExceptionTranslator
- */
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Map;
+
+import static java.lang.reflect.Proxy.newProxyInstance;
+import static org.apache.ibatis.reflection.ExceptionUtil.unwrapThrowable;
+import static org.mybatis.spring.SqlSessionUtils.*;
+
 public class CustomSqlSessionTemplate extends SqlSessionTemplate {
 
-    private final SqlSessionFactory sqlSessionFactory;
-
-    private final ExecutorType executorType;
-
-    private final SqlSession sqlSessionProxy;
-
-    private final PersistenceExceptionTranslator exceptionTranslator;
-
-    /**
-     * Constructs a Spring managed SqlSession with the {@code SqlSessionFactory}
-     * provided as an argument.
-     *
-     * @param sqlSessionFactory
-     */
-    public CustomSqlSessionTemplate(SqlSessionFactory sqlSessionFactory) {
+    public CustomSqlSessionTemplate(SqlSessionFactory sqlSessionFactory) throws IllegalAccessException{
         this(sqlSessionFactory, sqlSessionFactory.getConfiguration().getDefaultExecutorType());
     }
 
-    /**
-     * Constructs a Spring managed SqlSession with the {@code SqlSessionFactory}
-     * provided as an argument and the given {@code ExecutorType}
-     * {@code ExecutorType} cannot be changed once the {@code SqlSessionTemplate}
-     * is constructed.
-     *
-     * @param sqlSessionFactory
-     * @param executorType
-     */
-    public CustomSqlSessionTemplate(SqlSessionFactory sqlSessionFactory, ExecutorType executorType) {
+    public CustomSqlSessionTemplate(SqlSessionFactory sqlSessionFactory, ExecutorType executorType) throws IllegalAccessException{
         this(sqlSessionFactory, executorType,
                 new MyBatisExceptionTranslator(
                         sqlSessionFactory.getConfiguration().getEnvironment().getDataSource(), true));
-
     }
 
-    /**
-     * Constructs a Spring managed {@code SqlSession} with the given
-     * {@code SqlSessionFactory} and {@code ExecutorType}.
-     * A custom {@code SQLExceptionTranslator} can be provided as an
-     * argument so any {@code PersistenceException} thrown by MyBatis
-     * can be custom translated to a {@code RuntimeException}
-     * The {@code SQLExceptionTranslator} can also be null and thus no
-     * exception translation will be done and MyBatis exceptions will be
-     * thrown
-     *
-     * @param sqlSessionFactory
-     * @param executorType
-     * @param exceptionTranslator
-     */
     public CustomSqlSessionTemplate(SqlSessionFactory sqlSessionFactory, ExecutorType executorType,
-                              PersistenceExceptionTranslator exceptionTranslator) {
-        super(sqlSessionFactory, executorType, exceptionTranslator);
-        notNull(sqlSessionFactory, "Property 'sqlSessionFactory' is required");
-        notNull(executorType, "Property 'executorType' is required");
+                                    PersistenceExceptionTranslator exceptionTranslator) throws IllegalAccessException{
 
-        this.sqlSessionFactory = sqlSessionFactory;
-        this.executorType = executorType;
-        this.exceptionTranslator = exceptionTranslator;
-        this.sqlSessionProxy = (SqlSession) newProxyInstance(
+        super(sqlSessionFactory, executorType, exceptionTranslator);
+
+        /*
+        Mybatis 관련 작업을 하는데 사용되는 SqlSession 인터페이스 구현체로 이 클래스의 상위클래스인 SqlSessionTemplate
+        클래스의 멤버변수인 sqlSessionProxy 멤버변수를 사용하게 된다.
+        근데 문제는 이 sqlSessionProxy 변수에 기존 SqlSessionTemplate 클래스의 내부 클래스인 SqlSessionInterceptor 클래스를
+        수정한 현재 클래스의 내부 클래스인 CustomSqlSessionInterceptor 클래스 객체를 사용해서 SqlSession 구현체를 설정해야
+        하는데 이 sqlSessionProxy 멤버변수가 private final 타입으로 설정되어 있기 때문에 super 클래스의 생성자외엔 방법이
+        없다. 그러나 super 클래스의 생성자에서 하드코딩으로 SqlSesstionInterceptor 클래스 객체를 설정하기 때문에 정상적인
+        방법으로는 SqlSessionInterceptor 클래스 객체를 설정할 수 없었다.
+        이를 하기 위하여 Java의 Reflection을 이용해서 sqlSessionProxy 멤버변수를 접근한뒤에 CustomSqlSessioninterceptor
+        클래스가 적용된 SqlSession 구현체를 설정했다
+         */
+        Field field = ReflectionUtils.findField(this.getClass().getSuperclass(), "sqlSessionProxy");
+        field.setAccessible(true);
+        field.set(this, (SqlSession) newProxyInstance(
                 SqlSessionFactory.class.getClassLoader(),
                 new Class[] { SqlSession.class },
-                new SqlSessionInterceptor());
+                new CustomSqlSessionInterceptor()));
+        field.setAccessible(false);
+
     }
 
-    public SqlSessionFactory getSqlSessionFactory() {
-        return this.sqlSessionFactory;
-    }
-
-    public ExecutorType getExecutorType() {
-        return this.executorType;
-    }
-
-    public PersistenceExceptionTranslator getPersistenceExceptionTranslator() {
-        return this.exceptionTranslator;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <T> T selectOne(String statement) {
-        return this.sqlSessionProxy.<T> selectOne(statement);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <T> T selectOne(String statement, Object parameter) {
-        return this.sqlSessionProxy.<T> selectOne(statement, parameter);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <K, V> Map<K, V> selectMap(String statement, String mapKey) {
-        return this.sqlSessionProxy.<K, V> selectMap(statement, mapKey);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <K, V> Map<K, V> selectMap(String statement, Object parameter, String mapKey) {
-        return this.sqlSessionProxy.<K, V> selectMap(statement, parameter, mapKey);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <K, V> Map<K, V> selectMap(String statement, Object parameter, String mapKey, RowBounds rowBounds) {
-        return this.sqlSessionProxy.<K, V> selectMap(statement, parameter, mapKey, rowBounds);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <T> Cursor<T> selectCursor(String statement) {
-        return this.sqlSessionProxy.selectCursor(statement);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <T> Cursor<T> selectCursor(String statement, Object parameter) {
-        return this.sqlSessionProxy.selectCursor(statement, parameter);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <T> Cursor<T> selectCursor(String statement, Object parameter, RowBounds rowBounds) {
-        return this.sqlSessionProxy.selectCursor(statement, parameter, rowBounds);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <E> List<E> selectList(String statement) {
-        return this.sqlSessionProxy.<E> selectList(statement);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <E> List<E> selectList(String statement, Object parameter) {
-        return this.sqlSessionProxy.<E> selectList(statement, parameter);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <E> List<E> selectList(String statement, Object parameter, RowBounds rowBounds) {
-        return this.sqlSessionProxy.<E> selectList(statement, parameter, rowBounds);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void select(String statement, ResultHandler handler) {
-        this.sqlSessionProxy.select(statement, handler);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void select(String statement, Object parameter, ResultHandler handler) {
-        this.sqlSessionProxy.select(statement, parameter, handler);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void select(String statement, Object parameter, RowBounds rowBounds, ResultHandler handler) {
-        this.sqlSessionProxy.select(statement, parameter, rowBounds, handler);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public int insert(String statement) {
-        return this.sqlSessionProxy.insert(statement);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public int insert(String statement, Object parameter) {
-        return this.sqlSessionProxy.insert(statement, parameter);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public int update(String statement) {
-        return this.sqlSessionProxy.update(statement);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public int update(String statement, Object parameter) {
-        return this.sqlSessionProxy.update(statement, parameter);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public int delete(String statement) {
-        return this.sqlSessionProxy.delete(statement);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public int delete(String statement, Object parameter) {
-        return this.sqlSessionProxy.delete(statement, parameter);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public <T> T getMapper(Class<T> type) {
-        return getConfiguration().getMapper(type, this);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void commit() {
-        throw new UnsupportedOperationException("Manual commit is not allowed over a Spring managed SqlSession");
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void commit(boolean force) {
-        throw new UnsupportedOperationException("Manual commit is not allowed over a Spring managed SqlSession");
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void rollback() {
-        throw new UnsupportedOperationException("Manual rollback is not allowed over a Spring managed SqlSession");
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void rollback(boolean force) {
-        throw new UnsupportedOperationException("Manual rollback is not allowed over a Spring managed SqlSession");
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void close() {
-        throw new UnsupportedOperationException("Manual close is not allowed over a Spring managed SqlSession");
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void clearCache() {
-        this.sqlSessionProxy.clearCache();
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     */
-    @Override
-    public Configuration getConfiguration() {
-        return this.sqlSessionFactory.getConfiguration();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public Connection getConnection() {
-        return this.sqlSessionProxy.getConnection();
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * @since 1.0.2
-     *
-     */
-    @Override
-    public List<BatchResult> flushStatements() {
-        return this.sqlSessionProxy.flushStatements();
-    }
-
-    /**
-     * Allow gently dispose bean:
-     * <pre>
-     * {@code
-     *
-     * <bean id="sqlSession" class="org.mybatis.spring.SqlSessionTemplate">
-     *  <constructor-arg index="0" ref="sqlSessionFactory" />
-     * </bean>
-     * }
-     *</pre>
-     *
-     * The implementation of {@link DisposableBean} forces spring context to use {@link DisposableBean#destroy()} method instead of {@link org.mybatis.spring.SqlSessionTemplate#close()} to shutdown gently.
-     *
-     * @see org.mybatis.spring.SqlSessionTemplate#close()
-     * @see org.springframework.beans.factory.support.DisposableBeanAdapter#inferDestroyMethodIfNecessary
-     * @see org.springframework.beans.factory.support.DisposableBeanAdapter#CLOSE_METHOD_NAME
-     */
-    @Override
-    public void destroy() throws Exception {
-        //This method forces spring disposer to avoid call of SqlSessionTemplate.close() which gives UnsupportedOperationException
-    }
-
-    /**
-     * Proxy needed to route MyBatis method calls to the proper SqlSession got
-     * from Spring's Transaction Manager
-     * It also unwraps exceptions thrown by {@code Method#invoke(Object, Object...)} to
-     * pass a {@code PersistenceException} to the {@code PersistenceExceptionTranslator}.
-     */
-    private class SqlSessionInterceptor implements InvocationHandler {
+    private class CustomSqlSessionInterceptor implements InvocationHandler {
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            SqlSessionFactory sqlSessionFactory = getSqlSessionFactory();
+            ExecutorType executorType = getExecutorType();
+            PersistenceExceptionTranslator exceptionTranslator = getPersistenceExceptionTranslator();
+
             SqlSession sqlSession = getSqlSession(
-                    CustomSqlSessionTemplate.this.sqlSessionFactory,
-                    CustomSqlSessionTemplate.this.executorType,
-                    CustomSqlSessionTemplate.this.exceptionTranslator);
+                    sqlSessionFactory,
+                    executorType,
+                    exceptionTranslator);
             String sqlQuery = "";
             try {
                 Object result = method.invoke(sqlSession, args);
-                if (!isSqlSessionTransactional(sqlSession, CustomSqlSessionTemplate.this.sqlSessionFactory)) {
-                    // force commit even on non-dirty sessions because some databases require
-                    // a commit/rollback before calling close()
+                if (!isSqlSessionTransactional(sqlSession, sqlSessionFactory)) {
                     sqlSession.commit(true);
                 }
                 return result;
             } catch (Throwable t) {
                 sqlQuery = getQuery(sqlSession, (String)args[0], args[1]);
                 Throwable unwrapped = unwrapThrowable(t);
-                if (CustomSqlSessionTemplate.this.exceptionTranslator != null && unwrapped instanceof PersistenceException) {
+                if (exceptionTranslator != null && unwrapped instanceof PersistenceException) {
                     // release the connection to avoid a deadlock if the translator is no loaded. See issue #22
-                    closeSqlSession(sqlSession, CustomSqlSessionTemplate.this.sqlSessionFactory);
+                    closeSqlSession(sqlSession, sqlSessionFactory);
                     sqlSession = null;
-                    Throwable translated = CustomSqlSessionTemplate.this.exceptionTranslator.translateExceptionIfPossible((PersistenceException) unwrapped);
+                    Throwable translated = exceptionTranslator.translateExceptionIfPossible((PersistenceException) unwrapped);
                     if (translated != null) {
                         unwrapped = translated;
                     }
                 }
-                // throw unwrapped;
                 CustomDataAccessException cdae = new CustomDataAccessException(unwrapped.getMessage(), unwrapped.getCause(), sqlQuery);
                 throw cdae;
             } finally {
                 if (sqlSession != null) {
-                    closeSqlSession(sqlSession, CustomSqlSessionTemplate.this.sqlSessionFactory);
+                    closeSqlSession(sqlSession, sqlSessionFactory);
                 }
             }
         }
@@ -475,7 +106,7 @@ public class CustomSqlSessionTemplate extends SqlSessionTemplate {
      * @param sqlParam
      * @return
      */
-    private String getQuery(SqlSession sqlSession, String queryId , Object sqlParam) {
+    private String getQuery(SqlSession sqlSession, String queryId , Object sqlParam) throws NoSuchFieldException, IllegalAccessException{
 
         BoundSql boundSql = sqlSession.getConfiguration().getMappedStatement(queryId).getBoundSql(sqlParam);
         String sql = boundSql.getSql();
@@ -518,24 +149,19 @@ public class CustomSqlSessionTemplate extends SqlSessionTemplate {
                 Class<? extends Object> paramClass = sqlParam.getClass();
                 // logger.debug("paramClass.getName() : {}", paramClass.getName());
                 for(ParameterMapping mapping : paramMapping){
-                    try {
-                        String propValue = mapping.getProperty();            // 해당 파라미터로 넘겨받은 사용자 정의 클래스 객체의 멤버변수명
-                        Field field = paramClass.getDeclaredField(propValue);    // 관련 멤버변수 Field 객체 얻어옴
-                        if(field == null){
-                            throw new NoSuchFieldException();
-                        }
-                        field.setAccessible(true);                    // 멤버변수의 접근자가 private일 경우 reflection을 이용하여 값을 해당 멤버변수의 값을 가져오기 위해 별도로 셋팅
-                        Class<?> javaType = mapping.getJavaType();            // 해당 파라미터로 넘겨받은 사용자 정의 클래스 객체의 멤버변수의 타입
 
-                        if (String.class == javaType) {                // SQL의 ? 대신에 실제 값을 넣는다. 이때 String 일 경우는 '를 붙여야 하기땜에 별도 처리
-                            sql = sql.replaceFirst("\\?", "'" + field.get(sqlParam) + "'");
-                        } else {
-                            sql = sql.replaceFirst("\\?", field.get(sqlParam).toString());
-                        }
-                    }catch(NoSuchFieldException nfe){
+                    String propValue = mapping.getProperty();                   // 해당 파라미터로 넘겨받은 사용자 정의 클래스 객체의 멤버변수명
+                    Field field = doDeclaredField(paramClass, propValue);       // 관련 멤버변수 Field 객체 얻어옴
+                    if(field == null) {                                         // 최상위 클래스까지 갔는데도 필드를 찾지 못할경우엔 null이 return 되기 때문에 null을 return 하게 되면 NoSuchFieldException 예외를 던진다
+                        throw new NoSuchFieldException();
+                    }
+                    field.setAccessible(true);                    // 멤버변수의 접근자가 private일 경우 reflection을 이용하여 값을 해당 멤버변수의 값을 가져오기 위해 별도로 셋팅
+                    Class<?> javaType = mapping.getJavaType();            // 해당 파라미터로 넘겨받은 사용자 정의 클래스 객체의 멤버변수의 타입
 
-                    }catch(IllegalAccessException iae){
-
+                    if (String.class == javaType) {                // SQL의 ? 대신에 실제 값을 넣는다. 이때 String 일 경우는 '를 붙여야 하기땜에 별도 처리
+                        sql = sql.replaceFirst("\\?", "'" + field.get(sqlParam) + "'");
+                    } else {
+                        sql = sql.replaceFirst("\\?", field.get(sqlParam).toString());
                     }
                 }
             }
