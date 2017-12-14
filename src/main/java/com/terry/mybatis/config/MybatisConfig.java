@@ -4,6 +4,7 @@ import com.terry.mybatis.mybatis.CustomSqlSessionFactoryBean;
 import com.terry.mybatis.mybatis.CustomSqlSessionTemplate;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.SqlSessionTemplate;
 import org.mybatis.spring.mapper.MapperScannerConfigurer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,8 +28,6 @@ public class MybatisConfig {
         try{
             CustomSqlSessionFactoryBean sqlSessionFactoryBean = new CustomSqlSessionFactoryBean();
             sqlSessionFactoryBean.setDataSource(dataSource);
-            // sqlSessionFactoryBean.setConfigLocation(new ClassPathResource("com/terry/springconfig/resources/mybatis/config/mybatis-config.xml"));
-            // sqlSessionFactoryBean.setMapperLocations(new PathMatchingResourcePatternResolver().getResources("classpath:/com/terry/springconfig/resources/mybatis/mapper/**/*.xml"));
             sqlSessionFactoryBean.setConfigLocation(new ClassPathResource("mybatis/mybatis-config.xml"));
             sqlSessionFactoryBean.setMapperLocations(new PathMatchingResourcePatternResolver().getResources("classpath:/mapper/**/*.xml"));
             sqlSessionFactoryBean.setCheckInterval(60000);
@@ -48,6 +47,7 @@ public class MybatisConfig {
         mapperScannerConfigurer.setAnnotationClass(Mapper.class);
         mapperScannerConfigurer.setSqlSessionFactoryBeanName("sqlSessionFactory");
         mapperScannerConfigurer.setSqlSessionTemplateBeanName("customSqlSessionTemplate");
+        // mapperScannerConfigurer.setSqlSessionTemplateBeanName("sqlSessionTemplate");
         mapperScannerConfigurer.setBasePackage("com.terry.mybatis.mapper");
         return mapperScannerConfigurer;
     }
@@ -59,9 +59,10 @@ public class MybatisConfig {
 
     /*
     @Bean(destroyMethod="clearCache")
-    public SqlSessionTemplate sqlSession(){
-        SqlSessionTemplate template = new SqlSessionTemplate(sqlSessionFactory());
+    public SqlSessionTemplate sqlSessionTemplate(SqlSessionFactory sqlSessionFactory){
+        SqlSessionTemplate template = new SqlSessionTemplate(sqlSessionFactory);
         return template;
     }
     */
+
 }
